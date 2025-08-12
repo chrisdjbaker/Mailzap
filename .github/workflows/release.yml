@@ -1,0 +1,53 @@
+---
+name: Mailzap Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Mailzap version (e.g., v1.0.1)"
+        required: true
+        type: string
+
+jobs:
+  release:
+    name: Build and Release Mailzap Extension
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Mailzap repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Mailzap extension
+        run: npm run build
+
+      - name: Create Chrome Web Store package
+        run: |
+          cd dist
+          zip -r ../mailzap-${{ github.event.inputs.version }}.zip .
+          cd ..
+
+      - name: Create Mailzap Release
+        uses: softprops/action-gh-release@v2.2.2
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          name: "Mailzap ${{ github.event.inputs.version }}"
+          body: |
+            ## Mailzap Chrome Extension Release ${{ github.event.inputs.version }}
+            
+            Download the ZIP file and upload to Chrome Web Store Developer Dashboard.
+            
+            ### What's Changed
+            - Bug fixes and improvements
+            
+          files: mailzap-${{ github.event.inputs.version }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,31 @@
+.action-button {
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 14px;
+  height: 32px;
+  margin: 4px;
+  padding: 0 16px;
+  box-shadow: 0 3px 5px rgb(0 0 0 / 20%);
+  color: white;
+}
+
+#unsubscribe-button {
+  background-color: #34A853;
+}
+
+#unsubscribe-button:hover {
+  background-color: #2d8f47;
+}
+
+#delete-button {
+  background-color: #D93025;
+}
+
+#delete-button:hover {
+  background-color: #c5251a;
+}
+
+.action-button .i {
+  margin-right: 5px;
+}

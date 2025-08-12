@@ -1,0 +1,13 @@
+#loading-container {
+  width: 80%;
+  height: 8px;
+  background-color: #F1F3F4;
+  border-radius: 10px;
+  margin: 27px auto;
+}
+
+#progress-bar {
+  height: 100%;
+  background-color: #4285F4;
+  border-radius: 10px;
+}

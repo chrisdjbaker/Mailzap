@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "Mailzap - Bulk Unsubscribe & Clean Gmail",
+  "version": "1.0.0",
+  "description": "Clean your Gmail in seconds - mass unsubscribe and remove emails in bulk effortlessly with Mailzap.",
+  "icons": {
+    "16": "images/icon-16.png",
+    "32": "images/icon-32.png",
+    "48": "images/icon-48.png",
+    "128": "images/icon-128.png"
+  },
+  "permissions": ["sidePanel", "storage", "identity", "tabs"],
+  "action": {
+    "default_popup": "popup/index.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "js": ["content.js"],
+      "matches": ["https://mail.google.com/*"],
+      "type": "module"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["tutorial/*", "assets/*"],
+      "matches": ["https://mail.google.com/*"]
+    }
+  ],
+  "oauth2": {
+    "client_id": "110278242978-cmfj27ptft2or9cabdndurv6205n1sat.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/gmail.modify",
+      "https://www.googleapis.com/auth/gmail.settings.basic",
+      "https://www.googleapis.com/auth/userinfo.email"
+    ]
+  }
+}
