@@ -1,10 +1,6 @@
 # Mailzap - Chrome Extension
 
-A live Chrome extension that helps declutter Gmail inboxes through intelligent sender analysis and bulk email management.
-
-**🔗 [Available on Chrome Web Store](https://chromewebstore.google.com/detail/mailzap/[NEW_EXTENSION_ID])**
-
-**🌐 [Visit Mailzap Website](https://www.mailzap.net/)**
+A Chrome extension that helps declutter Gmail inboxes through intelligent sender analysis and bulk email management.
 
 ## 🎯 Project Overview
 
