@@ -89,18 +89,6 @@ export function parseListUnsubscribeHeader(
 }
 
 /**
- * Helper function to convert a UTF-8 string into a binary string where each character represents a byte.
- *
- * @param str - The input string to convert.
- * @returns A binary string representation of the UTF-8 encoded input.
- */
-export function utf8ToBinary(str: string): string {
-  return new TextEncoder()
-    .encode(str)
-    .reduce((s, byte) => s + String.fromCharCode(byte), "");
-}
-
-/**
  * Retrieves the Gmail account associated with the currently active browser tab.
  *
  * This function sends a message to the content script of the active tab to request the current email account.

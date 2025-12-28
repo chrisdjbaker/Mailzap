@@ -12,33 +12,6 @@ function searchEmailSenders(emails) {
   document.querySelector("button[aria-label='Search mail']").click();
 }
 
-function displayTutorial() {
-  // Create an iframe element
-  const iframe = document.createElement("iframe");
-  iframe.id = "mailzap-tutorial";
-  iframe.src = chrome.runtime.getURL("tutorial/index.html");
-
-  // Style the iframe as a modal
-  iframe.allowtransparency = "true";
-  iframe.style.backgroundColor = "transparent";
-  iframe.style.position = "fixed";
-  iframe.style.top = "50%";
-  iframe.style.left = "50%";
-  iframe.style.transform = "translate(-50%, -50%)";
-  iframe.style.width = "100%";
-  iframe.style.height = "100%";
-  iframe.style.border = "none";
-  iframe.style.zIndex = "10000";
-
-  // Append the iframe to the document body
-  document.body.appendChild(iframe);
-}
-
-function closeTutorial() {
-  const iframe = document.getElementById("mailzap-tutorial");
-  iframe?.remove();
-}
-
 function getEmailAccount() {
   // Get the email account from the page
   const title = document.querySelector("title").textContent;
@@ -49,20 +22,6 @@ chrome.runtime.onMessage.addListener((message) => {
   if (message.type === "SEARCH_EMAIL_SENDERS") {
     console.log("Received message to search email senders:", message.emails);
     searchEmailSenders(message.emails);
-  }
-});
-
-chrome.runtime.onMessage.addListener((message) => {
-  if (message.action === "SHOW_TUTORIAL") {
-    console.log("Received message to show tutorial");
-    displayTutorial();
-  }
-});
-
-chrome.runtime.onMessage.addListener((message) => {
-  if (message.action === "CLOSE_TUTORIAL") {
-    console.log("Received message to close tutorial");
-    closeTutorial();
   }
 });
 

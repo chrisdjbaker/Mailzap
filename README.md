@@ -104,7 +104,6 @@ Mailzap provides a **comprehensive dashboard** that:
 - **Chrome Side Panel** integration (Gmail only)
 - **Responsive design** with loading states
 - **Skeleton screens** during data fetching
-- **Interactive tutorial** for first-time users
 - **Clean, intuitive interface** built with React
 
 </td>
@@ -118,7 +117,7 @@ Mailzap provides a **comprehensive dashboard** that:
 ### **Frontend Framework**
 | Technology | Version | Purpose | Where Used |
 |-----------|---------|---------|------------|
-| **React** | 19.0.0 | Component-based UI framework with hooks | All UI components (sidebar, popup, tutorial) |
+| **React** | 19.0.0 | Component-based UI framework with hooks | All UI components (sidebar, popup) |
 | **TypeScript** | 5.7.2 | Static typing for better code quality | Entire codebase for type safety |
 | **CSS3** | - | Styling with custom animations | Component-specific stylesheets |
 
@@ -140,7 +139,7 @@ Mailzap provides a **comprehensive dashboard** that:
 **Why Vite?** Lightning-fast hot module replacement (HMR), optimized production builds, and better developer experience compared to webpack.
 
 **Vite Configuration Highlights:**
-- Multi-page setup with separate entry points for sidebar, popup, and tutorial
+- Multi-page setup with separate entry points for sidebar and popup
 - Public directory for static assets and manifest
 - React plugin for JSX transformation
 
@@ -229,8 +228,7 @@ Mailzap provides a **comprehensive dashboard** that:
 ```mermaid
 graph TD
     A[User Installs Extension] --> B[Opens Gmail]
-    B --> C[Tutorial Appears]
-    C --> D[User Clicks Extension Icon]
+    B --> D[User Clicks Extension Icon]
     D --> E[Side Panel Opens]
     E --> F[OAuth Login Required?]
     F -->|Yes| G[Google Sign-In]
@@ -264,25 +262,7 @@ graph TD
 ### **Step-by-Step Process**
 
 <details>
-<summary><strong>1️⃣ Installation & First Launch</strong></summary>
-
-**What Happens:**
-- User installs extension from Chrome Web Store
-- Extension icon appears in browser toolbar
-- On first launch, `chrome.runtime.onInstalled` triggers
-- Opens Gmail in new tab and injects tutorial iframe
-
-**Code:** `background.js` lines 19-32
-
-**User Experience:**
-- Interactive tutorial overlay on Gmail
-- 5-step guided tour explaining features
-- "Get Started" button to close tutorial
-
-</details>
-
-<details>
-<summary><strong>2️⃣ Authentication Flow</strong></summary>
+<summary><strong>1️⃣ Authentication Flow</strong></summary>
 
 **What Happens:**
 1. User clicks extension icon on Gmail
@@ -303,7 +283,7 @@ graph TD
 </details>
 
 <details>
-<summary><strong>3️⃣ Email Scanning & Analysis</strong></summary>
+<summary><strong>2️⃣ Email Scanning & Analysis</strong></summary>
 
 **What Happens:**
 1. Check Chrome storage for existing sender data
@@ -338,7 +318,7 @@ graph TD
 </details>
 
 <details>
-<summary><strong>4️⃣ Sender Selection & Display</strong></summary>
+<summary><strong>3️⃣ Sender Selection & Display</strong></summary>
 
 **What Happens:**
 1. Retrieve sorted sender list from storage
@@ -359,7 +339,7 @@ graph TD
 </details>
 
 <details>
-<summary><strong>5️⃣ Unsubscribe Operation</strong></summary>
+<summary><strong>4️⃣ Unsubscribe Operation</strong></summary>
 
 **What Happens:**
 1. User selects senders and clicks "Unsubscribe"
@@ -389,7 +369,7 @@ graph TD
 </details>
 
 <details>
-<summary><strong>6️⃣ Delete Operation</strong></summary>
+<summary><strong>5️⃣ Delete Operation</strong></summary>
 
 **What Happens:**
 1. User selects senders and clicks "Delete"
@@ -411,7 +391,7 @@ graph TD
 </details>
 
 <details>
-<summary><strong>7️⃣ Block Sender</strong></summary>
+<summary><strong>6️⃣ Block Sender</strong></summary>
 
 **What Happens:**
 1. Creates Gmail filter via `/settings/filters` endpoint
@@ -438,7 +418,7 @@ graph TD
 Mailzap/
 ├── 📁 public/                      # Static assets & extension files
 │   ├── manifest.json               # Chrome extension configuration (Manifest V3)
-│   ├── background.js               # Service worker (side panel logic, tutorial trigger)
+│   ├── background.js               # Service worker (side panel logic)
 │   ├── content.js                  # Content script (Gmail page interaction)
 │   ├── 📁 images/                  # Extension icons (16x16 to 128x128)
 │   └── 📁 assets/                  # Built static assets (Vite output)
@@ -472,45 +452,31 @@ Mailzap/
 │   │   ├── Popup.tsx               # Simple info popup with links
 │   │   └── Popup.css               # Popup styles
 │   │
-│   ├── 📁 sidebar/                 # Side panel UI (Gmail pages)
-│   │   ├── index.html              # Sidebar entry point
-│   │   ├── main.tsx                # React entry (renders App with providers)
-│   │   ├── App.tsx                 # Main app component (login check, layout)
-│   │   ├── App.css                 # Global sidebar styles
-│   │   ├── 📁 components/          # Reusable UI components
-│   │   │   ├── header.tsx          # Top header with logo
-│   │   │   ├── loadingBar.tsx      # Progress bar during email fetch
-│   │   │   ├── senderLine.tsx      # Single sender row (checkbox, name, email, count)
-│   │   │   ├── senderLineSkeleton.tsx # Loading skeleton for sender rows
-│   │   │   ├── sendersContainer.tsx # Main container for sender list
-│   │   │   ├── actionButton.tsx    # Unsubscribe/Delete buttons
-│   │   │   ├── reloadButton.tsx    # Reload sender data button
-│   │   │   ├── closeButton.tsx     # Close button
-│   │   │   ├── modalPopup.tsx      # Modal for confirmations/errors/success
-│   │   │   ├── toggleSwitch.tsx    # Toggle switch component
-│   │   │   ├── toggleOption.tsx    # Toggle option with label
-│   │   │   └── 📁 login-page/
-│   │   │       ├── loginPage.tsx   # Login screen UI
-│   │   │       └── googleAuthButton.tsx # "Sign in with Google" button
-│   │   ├── 📁 providers/           # Sidebar-specific context providers
-│   │   │   ├── allGlobalProviders.tsx # Wrapper for all providers
-│   │   │   ├── modalContext.tsx        # Modal state management
-│   │   │   ├── selectedSendersContext.tsx # Selected senders state
-│   │   │   └── sendersContext.tsx      # Sender list state
-│   │   └── 📁 utils/
-│   │       └── unsubscribeFlow.tsx # Unsubscribe workflow orchestration
-│   │
-│   └── 📁 tutorial/                # First-time user tutorial
-│       ├── index.html              # Tutorial entry point
-│       ├── main.tsx                # React entry (renders Tutorial)
-│       ├── Tutorial.tsx            # Tutorial step manager
-│       ├── Tutorial.css            # Tutorial styles
-│       ├── 📁 components/
-│       │   ├── steps.tsx           # 5-step tutorial content
-│       │   ├── modal.tsx           # Tutorial modal overlay
-│       │   ├── googleAuthButton.tsx # Auth button in tutorial
-│       │   └── successIcon.tsx     # Success checkmark icon
-│       └── 📁 assets/              # Tutorial-specific images
+│   └── 📁 sidebar/                 # Side panel UI (Gmail pages)
+│       ├── index.html              # Sidebar entry point
+│       ├── main.tsx                # React entry (renders App with providers)
+│       ├── App.tsx                 # Main app component (login check, layout)
+│       ├── App.css                 # Global sidebar styles
+│       ├── 📁 components/          # Reusable UI components
+│       │   ├── header.tsx          # Top header with logo
+│       │   ├── loadingBar.tsx      # Progress bar during email fetch
+│       │   ├── senderLine.tsx      # Single sender row (checkbox, name, email, count)
+│       │   ├── senderLineSkeleton.tsx # Loading skeleton for sender rows
+│       │   ├── sendersContainer.tsx # Main container for sender list
+│       │   ├── actionButton.tsx    # Unsubscribe/Delete buttons
+│       │   ├── reloadButton.tsx    # Reload sender data button
+│       │   ├── modalPopup.tsx      # Modal for confirmations/errors/success
+│       │   ├── toggleSwitch.tsx    # Toggle switch component
+│       │   ├── toggleOption.tsx    # Toggle option with label
+│       │   └── 📁 login-page/
+│       │       └── loginPage.tsx   # Login screen UI
+│       ├── 📁 providers/           # Sidebar-specific context providers
+│       │   ├── allGlobalProviders.tsx # Wrapper for all providers
+│       │   ├── modalContext.tsx        # Modal state management
+│       │   ├── selectedSendersContext.tsx # Selected senders state
+│       │   └── sendersContext.tsx      # Sender list state
+│       └── 📁 utils/
+│           └── unsubscribeFlow.tsx # Unsubscribe workflow orchestration
 │
 ├── 📁 extras/                      # Marketing assets (logo, promo images)
 │
@@ -643,9 +609,8 @@ App (sidebar/App.tsx)
 │  │  ┌──────────────────┐      ┌──────────────────────┐   │  │
 │  │  │  Gmail DOM       │◄────►│  content.js          │   │  │
 │  │  │  • Search bar    │      │  • searchEmailSenders│   │  │
-│  │  │  • Email list    │      │  • displayTutorial   │   │  │
-│  │  │  • Page title    │      │  • getEmailAccount   │   │  │
-│  │  └──────────────────┘      └──────────┬───────────┘   │  │
+│  │  │  • Email list    │      │  • getEmailAccount   │   │  │
+│  │  │  • Page title    │      └──────────┬───────────┘   │  │
 │  │                                        │              │  │
 │  └────────────────────────────────────────┼──────────────┘  │
 │                                            │                │
@@ -666,7 +631,6 @@ App (sidebar/App.tsx)
 │  │           background.js                                │ │
 │  │  • Side panel enable/disable logic                     │ │
 │  │  • Popup toggle based on current URL                   │ │
-│  │  • Show tutorial on first install                      │ │
 │  │  • Message routing between components                  │ │
 │  └─────────────────────────────┬──────────────────────────┘ │
 │                                │                            │
@@ -742,7 +706,6 @@ App (sidebar/App.tsx)
 - ✅ **Documentation** with JSDoc comments
 
 #### **User Experience**
-- ✅ **Progressive disclosure** (tutorial system)
 - ✅ **Loading states** (skeletons, progress bars)
 - ✅ **Confirmation dialogs** (preventing mistakes)
 - ✅ **Error handling** (graceful failures)
@@ -872,7 +835,7 @@ App (sidebar/App.tsx)
 3. Click **"Add extension"** in the confirmation dialog
 4. Open [Gmail](https://mail.google.com)
 5. Click the Mailzap icon in the toolbar
-6. Follow the tutorial to get started!
+6. Sign in and start decluttering!
 
 ---
 
