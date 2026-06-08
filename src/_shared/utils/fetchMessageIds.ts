@@ -1,4 +1,10 @@
-import { sleep } from "./utils";
+import { gmailFetch } from "./gmailApi";
+
+interface MessageListResponse {
+  messages?: { id: string }[];
+  nextPageToken?: string;
+  resultSizeEstimate?: number;
+}
 
 /**
  * Fetches all message IDs from the user's mailbox by iteratively retrieving paginated results.
@@ -12,16 +18,13 @@ export async function fetchMessageIds(
   token: chrome.identity.GetAuthTokenResult,
   senderEmail?: string,
   deps?: {
-    fetchMessageIdsPage?: () => Promise<{
-      messageIds: string[];
-      nextPage: string | null;
-    }>;
+    fetchMessageIdsPage?: typeof fetchMessageIdsPage;
   },
 ): Promise<string[]> {
   const { fetchMessageIdsPage: _fetchMessageIdsPage = fetchMessageIdsPage } =
     deps || {};
 
-  let nextPageToken = null;
+  let nextPageToken: string | null = null;
   const allMessageIds: string[] = [];
 
   do {
@@ -47,44 +50,29 @@ export async function fetchMessageIds(
  * @returns A promise that resolves to an object containing an array of message IDs and the next page token (or `null` if there are no more pages).
  *
  * @remarks
- * If the Gmail API rate limit is exceeded (HTTP 429), the function waits for 1 second and retries the request.
+ * Rate limiting and transient errors are handled centrally by {@link gmailFetch}.
  */
 async function fetchMessageIdsPage(
   token: chrome.identity.GetAuthTokenResult,
   pageToken: string | null,
   senderEmail?: string,
 ): Promise<{ messageIds: string[]; nextPage: string | null }> {
-  // Construct the URL with the sender's email and pagination token
-  let url = `https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=500`;
+  let path = `/messages?maxResults=500`;
   if (senderEmail) {
-    url += `&q=from:${encodeURIComponent(senderEmail)}`;
+    path += `&q=from:${encodeURIComponent(senderEmail)}`;
   }
   if (pageToken) {
-    url += `&pageToken=${pageToken}`;
+    path += `&pageToken=${encodeURIComponent(pageToken)}`;
   }
 
-  // Fetch emails for the page
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  });
+  const data = await gmailFetch<MessageListResponse>(path, token);
 
-  // Handle rate limiting
-  if (response.status === 429) {
-    console.warn("Rate limit exceeded. Retrying...");
-    await sleep(1000);
-    return fetchMessageIdsPage(token, pageToken, senderEmail); // Retry
-  }
+  // Gmail omits `messages` entirely when there are zero matches — guard against it.
+  const messages = data.messages ?? [];
+  console.log(`Found ${messages.length} messages from ${senderEmail ?? "all"}`);
 
-  const data = await response.json();
-  console.log(`Found ${data.messages.length} messages from ${senderEmail}`);
-
-  // Parse response
   return {
-    messageIds: data.messages.map((m: gapi.client.gmail.Message) => m.id) || [],
+    messageIds: messages.map((m) => m.id),
     nextPage: data.nextPageToken || null,
   };
 }

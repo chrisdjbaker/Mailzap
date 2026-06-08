@@ -1,5 +1,9 @@
 import { getValidToken } from "./chromeAuth";
 import { fetchMessageIds } from "./fetchMessageIds";
+import { gmailFetch } from "./gmailApi";
+
+// Gmail's batchModify endpoint accepts up to 1000 message IDs per request.
+const BATCH_MODIFY_LIMIT = 1000;
 
 /**
  * Trashes emails from multiple senders.
@@ -30,33 +34,31 @@ export async function trashMultipleSenders(
  * @returns A promise that resolves to the number of emails moved to Trash.
  *
  * @remarks
- * - Searches for up to 500 messages from the specified sender.
- * - Each found message is moved to the Trash using the Gmail API.
- * - If no messages are found, returns 0.
+ * Uses Gmail's `batchModify` endpoint to add the `TRASH` label to up to 1000
+ * messages per request, instead of issuing one request per message. For a
+ * sender with thousands of emails this turns hundreds of round-trips into a
+ * handful, and is far less likely to trip rate limits.
  */
 async function trashSender(
   token: chrome.identity.GetAuthTokenResult,
   senderEmail: string,
 ): Promise<number> {
-  // Step 1: Get all message IDs of the sender
   const messageIds = await fetchMessageIds(token, senderEmail);
   if (messageIds.length === 0) return 0; // No emails to trash
 
-  // Step 2: Move each message to Trash
-  for (const id of messageIds) {
-    await fetch(
-      `https://www.googleapis.com/gmail/v1/users/me/messages/${id}/trash`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      },
-    );
+  for (let i = 0; i < messageIds.length; i += BATCH_MODIFY_LIMIT) {
+    const batch = messageIds.slice(i, i + BATCH_MODIFY_LIMIT);
+    await gmailFetch("/messages/batchModify", token, {
+      method: "POST",
+      body: JSON.stringify({
+        ids: batch,
+        addLabelIds: ["TRASH"],
+        removeLabelIds: ["INBOX"],
+      }),
+    });
   }
 
-  console.log(`Deleted ${messageIds.length} emails from ${senderEmail}`);
+  console.log(`Trashed ${messageIds.length} emails from ${senderEmail}`);
   return messageIds.length; // Return the number of emails trashed
 }
 

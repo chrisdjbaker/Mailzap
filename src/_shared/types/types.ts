@@ -10,11 +10,18 @@ export interface Sender {
  * @property posturl - The URL to send an HTTP POST request to unsubscribe, or null if not available.
  * @property mailto - The mailto link to send an unsubscribe email, or null if not available.
  * @property clickurl - The URL to visit in order to unsubscribe, or null if not available.
+ * @property oneClick - Whether the sender supports RFC 8058 one-click POST unsubscribe.
  */
 export interface UnsubscribeData {
   posturl: string | null;
   mailto: string | null;
   clickurl: string | null;
+  /**
+   * True when the sender advertises RFC 8058 one-click unsubscribe
+   * (`List-Unsubscribe-Post: List-Unsubscribe=One-Click`). Only then is it safe
+   * to POST to `posturl` automatically without user interaction.
+   */
+  oneClick: boolean;
 }
 
 /**

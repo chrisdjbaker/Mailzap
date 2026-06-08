@@ -5,6 +5,7 @@ import { unsubscribeSendersAuto } from "../unsubscribeSenders";
 import { Actions } from "./actionsInterface";
 import { getValidToken, signInWithGoogle } from "../chromeAuth";
 import { getEmailAccount } from "../utils";
+import { gmailFetch } from "../gmailApi";
 
 export const realActions: Actions = {
   async isLoggedIn(
@@ -152,25 +153,12 @@ export const realActions: Actions = {
       criteria: { from: senderEmailAddress },
       action: { addLabelIds: ["TRASH"] },
     };
-    const headers = {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    };
 
     try {
-      const response = await fetch(
-        "https://www.googleapis.com/gmail/v1/users/me/settings/filters",
-        {
-          method: "POST",
-          headers: headers,
-          body: JSON.stringify(filter),
-        },
-      );
-      if (!response.ok) {
-        throw new Error(
-          `Failed to create block filter: ${response.statusText}`,
-        );
-      }
+      await gmailFetch("/settings/filters", token, {
+        method: "POST",
+        body: JSON.stringify(filter),
+      });
     } catch (err) {
       console.error(
         `Failed to create block filter for ${senderEmailAddress}:`,

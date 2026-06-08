@@ -1,21 +1,25 @@
 function searchEmailSenders(emails) {
-  // Concatenate emails
   const email = emails.join(" OR ");
 
-  // Get the search input element
   const searchInput = document.querySelector("input[name='q']");
+  const searchButton = document.querySelector("button[aria-label='Search mail']");
 
-  // Set the search input value to the email address
+  if (!searchInput || !searchButton) {
+    console.warn("Mailzap: Gmail search UI not found; skipping search.");
+    return;
+  }
+
   searchInput.value = `from:(${email})`;
-
-  // Submit the search form
-  document.querySelector("button[aria-label='Search mail']").click();
+  searchButton.click();
 }
 
 function getEmailAccount() {
-  // Get the email account from the page
-  const title = document.querySelector("title").textContent;
-  return title.split(" - ")[1].trim();
+  // Gmail's <title> looks like "Inbox (12) - user@gmail.com - Gmail".
+  // Pick out the token that actually looks like an email address rather than
+  // relying on a fixed split position, which breaks with localized titles.
+  const title = document.querySelector("title")?.textContent ?? "";
+  const match = title.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+  return match ? match[0] : null;
 }
 
 chrome.runtime.onMessage.addListener((message) => {
@@ -27,7 +31,6 @@ chrome.runtime.onMessage.addListener((message) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "GET_EMAIL_ACCOUNT") {
-    const value = getEmailAccount();
-    sendResponse({ result: value });
+    sendResponse({ result: getEmailAccount() });
   }
 });

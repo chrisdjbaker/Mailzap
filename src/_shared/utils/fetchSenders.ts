@@ -1,6 +1,7 @@
 import { getValidToken } from "./chromeAuth";
-import { parseSender, sleep } from "./utils";
+import { parseSender } from "./utils";
 import { fetchMessageIds } from "./fetchMessageIds";
+import { gmailBatchGet, GMAIL_BATCH_LIMIT } from "./gmailApi";
 
 interface SenderData {
   name: Set<string>;
@@ -14,6 +15,11 @@ interface MessageData {
   messageId: string;
 }
 
+interface GmailMessage {
+  id?: string;
+  payload?: { headers?: { name: string; value: string }[] };
+}
+
 /**
  * Fetches all unique email senders for a given Gmail account and counts their number of messages
  * The resulting sender data is stored for the specified account, in Chrome's local storage.
@@ -22,113 +28,94 @@ interface MessageData {
  * @returns A Promise that resolves when all senders have been fetched and stored.
  *
  * @remarks
- * - Progress is tracked and updated in Chrome's local storage under the key `fetchProgress`,
- * with the account email as the sub-key.
- * - Sender data is stored in Chrome's local storage using the `storeSenders` utility.
+ * - Progress is tracked under `fetchProgress[accountEmail]` in Chrome's local
+ *   storage as a fraction between 0 and 1, merged so that progress for other
+ *   accounts is preserved.
+ * - Sender metadata is fetched using Gmail's batch endpoint
+ *   ({@link gmailBatchGet}) to minimise round-trips.
  */
 export async function fetchAllSenders(accountEmail: string): Promise<void> {
   const authToken = await getValidToken(accountEmail);
   const senders: { [key: string]: SenderData } = {};
-  let percentageComplete: number = 0;
 
   try {
     const allMessageIds = await fetchMessageIds(authToken);
+    const total = allMessageIds.length;
 
-    // Process messages in batches of 40
-    for (let i = 0; i < allMessageIds.length; i += 40) {
-      const batchIds = allMessageIds.slice(i, i + 40);
-      const batchSenders: MessageData[] = await fetchMessageSendersBatch(
-        authToken,
-        batchIds,
-      );
+    await setProgress(accountEmail, total === 0 ? 1 : 0);
+
+    for (let i = 0; i < total; i += GMAIL_BATCH_LIMIT) {
+      const batchIds = allMessageIds.slice(i, i + GMAIL_BATCH_LIMIT);
+      const batchSenders = await fetchMessageSendersBatch(authToken, batchIds);
       updateSenders(batchSenders, senders);
 
-      // Send a message about progress
-      percentageComplete += 40 / allMessageIds.length;
-      chrome.storage.local.set({
-        fetchProgress: { [accountEmail]: percentageComplete },
-      });
+      // Progress reflects how many messages have actually been processed.
+      await setProgress(
+        accountEmail,
+        Math.min((i + batchIds.length) / total, 1),
+      );
     }
 
     console.log(
-      `Fetched ${allMessageIds.length} emails. Found ${Object.keys(senders).length} unique senders.`,
+      `Fetched ${total} emails. Found ${Object.keys(senders).length} unique senders.`,
     );
 
     storeSenders(senders, accountEmail);
-
-    // Reset progress after completion
-    chrome.storage.local.set({
-      fetchProgress: { [accountEmail]: 0 },
-    });
   } catch (err) {
     console.error("Error fetching senders:", err);
+    throw err;
+  } finally {
+    // Always clear progress so the UI doesn't get stuck on a stale value.
+    await setProgress(accountEmail, 0);
   }
 }
 
 /**
- * Fetches sender information for a batch of Gmail message IDs.
+ * Merges a progress fraction for one account into `fetchProgress`, preserving
+ * any progress recorded for other accounts.
+ */
+async function setProgress(
+  accountEmail: string,
+  fraction: number,
+): Promise<void> {
+  const { fetchProgress = {} } =
+    await chrome.storage.local.get("fetchProgress");
+  await chrome.storage.local.set({
+    fetchProgress: { ...fetchProgress, [accountEmail]: fraction },
+  });
+}
+
+/**
+ * Fetches sender information for a batch of Gmail message IDs in a single
+ * multipart batch request.
  *
  * @param token - The OAuth token used for authenticating Gmail API requests.
- * @param messageIds - An array of Gmail message IDs to fetch sender information for.
- * @returns A Promise that resolves to an array of `MessageData` objects, each containing
- *          sender information for the corresponding message ID.
+ * @param messageIds - Up to {@link GMAIL_BATCH_LIMIT} Gmail message IDs.
+ * @returns A Promise resolving to the sender info for each successfully fetched message.
  */
 async function fetchMessageSendersBatch(
   token: chrome.identity.GetAuthTokenResult,
   messageIds: string[],
 ): Promise<MessageData[]> {
-  return Promise.all(
-    messageIds.map((id) => fetchMessageSenderSingle(token, id)),
+  const paths = messageIds.map(
+    (id) => `/messages/${id}?format=metadata&metadataHeaders=From`,
   );
-}
+  const responses = await gmailBatchGet<GmailMessage>(paths, token);
 
-/**
- * Fetches the sender's email and name for a single Gmail message using the Gmail API.
- *
- * @param token - The OAuth 2.0 access token for authenticating with the Gmail API.
- * @param messageId - The unique identifier of the Gmail message to fetch.
- * @returns A promise that resolves to a `MessageData` object containing the sender's email, name, and message ID.
- */
-async function fetchMessageSenderSingle(
-  token: chrome.identity.GetAuthTokenResult,
-  messageId: string,
-): Promise<MessageData> {
-  // Fetch message metadata
-  const response = await fetch(
-    `https://www.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=metadata&metadataHeaders=From`,
-    {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    },
-  );
-
-  // Handle rate limiting
-  if (response.status === 429) {
-    console.warn("Rate limit hit. Pausing...");
-    await sleep(1000);
-    return await fetchMessageSenderSingle(token, messageId); // Retry
-  }
-
-  // Handle 403 error
-  if (response.status === 403) {
-    console.warn("Error. Pausing...");
-    await sleep(1000);
-    return await fetchMessageSenderSingle(token, messageId); // Retry
-  }
-
-  // Extract sender from response
-  const msgData = await response.json();
-  const sender = msgData.payload?.headers?.find(
-    (header: { name: string }) => header.name === "From",
-  )?.value;
-
-  // Parse the name and email from the sender
-  const [email, name] = parseSender(sender);
-
-  return { senderEmail: email, senderName: name, messageId };
+  const result: MessageData[] = [];
+  responses.forEach((msgData, i) => {
+    if (!msgData) return; // Skip sub-requests that failed.
+    const sender = msgData.payload?.headers?.find(
+      (header) => header.name === "From",
+    )?.value;
+    const [email, name] = parseSender(sender ?? null);
+    result.push({
+      senderEmail: email,
+      senderName: name,
+      messageId: msgData.id ?? messageIds[i],
+    });
+  });
+  return result;
 }
 
 /**
@@ -169,7 +156,6 @@ function storeSenders(
   senders: { [s: string]: SenderData },
   accountEmail: string,
 ): void {
-  // Parse and sort senders by email count
   const parsedSenders = Object.entries(senders)
     .map(([email, { name, count, latestMessageId }]) => [
       email,
@@ -179,12 +165,11 @@ function storeSenders(
     ])
     .sort((a, b) => Number(b[2]) - Number(a[2])); // Sort by count in descending order
 
-  // Store in local storage
   chrome.storage.local.set({ [accountEmail]: { senders: parsedSenders } });
 }
 
 export const exportForTest = {
-  fetchMessageSenderSingle,
+  fetchMessageSendersBatch,
   updateSenders,
   storeSenders,
 };

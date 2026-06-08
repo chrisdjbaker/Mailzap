@@ -62,6 +62,7 @@ export function parseListUnsubscribeHeader(
     posturl: null,
     mailto: null,
     clickurl: null,
+    oneClick: false,
   };
 
   // Return empty data if header is not present
@@ -72,16 +73,12 @@ export function parseListUnsubscribeHeader(
   const parts = header.split(",");
 
   for (const part of parts) {
-    const trimmedPart = part
-      .trim()
-      .substring(1, part.length - 1)
-      .trim(); // Remove surrounding angle brackets
-    if (trimmedPart.startsWith("http") || trimmedPart.startsWith("https")) {
-      // It's a URL
-      unsubscribeData.posturl = trimmedPart; // Store the URL
-    } else if (trimmedPart.startsWith("mailto:")) {
-      // It's an email address
-      unsubscribeData.mailto = trimmedPart.slice(7); // Store the email address, removing "mailto:" prefix
+    // Strip surrounding angle brackets and whitespace.
+    const value = part.trim().replace(/^<|>$/g, "").trim();
+    if (value.startsWith("http://") || value.startsWith("https://")) {
+      unsubscribeData.posturl = value; // HTTP(S) unsubscribe endpoint
+    } else if (value.startsWith("mailto:")) {
+      unsubscribeData.mailto = value.slice("mailto:".length); // strip prefix
     }
   }
 

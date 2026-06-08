@@ -41,6 +41,3 @@ chrome.runtime.onInstalled.addListener(function (object) {
     });
   }
 });
-
-// Shows an uninstall survey when extension is removed
-chrome.runtime.setUninstallURL("https://tally.so/r/[NEW_SURVEY_ID]");
