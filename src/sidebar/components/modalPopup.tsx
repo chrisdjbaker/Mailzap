@@ -1,5 +1,5 @@
 import "./modalPopup.css";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useModal } from "../providers/modalContext";
 import { useSelectedSenders } from "../providers/selectedSendersContext";
 import { useSenders } from "../providers/sendersContext";
@@ -7,10 +7,21 @@ import { useActions } from "../../_shared/providers/actionsContext";
 import { ToggleOption } from "./toggleOption";
 import { useUnsubscribeFlow } from "../utils/unsubscribeFlow";
 import { useLoggedIn } from "../../_shared/providers/loggedInContext";
+import { formatBytes } from "../../_shared/utils/utils";
+import { CleanRule, MessagePreview } from "../../_shared/types/types";
 
 interface ConfirmProps {
   emailsNum: number;
   sendersNum: number;
+}
+
+/** Sums the stored size of the currently selected senders. */
+function useSelectedSize(): number {
+  const { selectedSenders } = useSelectedSenders();
+  const { senders } = useSenders();
+  return senders
+    .filter((s) => s.email in selectedSenders)
+    .reduce((sum, s) => sum + s.size, 0);
 }
 
 const UnsubscribeConfirm = ({ emailsNum, sendersNum }: ConfirmProps) => {
@@ -171,6 +182,7 @@ const DeleteConfirm = ({ emailsNum, sendersNum }: ConfirmProps) => {
   const { reloadSenders } = useSenders();
   const { setModal } = useModal();
   const { setLoggedIn } = useLoggedIn();
+  const size = useSelectedSize();
 
   const showEmails = () => {
     searchEmailSenders(Object.keys(selectedSenders));
@@ -178,10 +190,8 @@ const DeleteConfirm = ({ emailsNum, sendersNum }: ConfirmProps) => {
 
   const deleteEmails = async () => {
     try {
-      // Set modal to pending state
       setModal({ action: "delete", type: "pending" });
 
-      // Delete senders and remove them from selectedSenders
       await deleteSenders(Object.keys(selectedSenders));
       for (const senderEmail in selectedSenders) {
         setSelectedSenders((prev) => {
@@ -191,15 +201,12 @@ const DeleteConfirm = ({ emailsNum, sendersNum }: ConfirmProps) => {
         });
       }
 
-      // Set modal to success state
       setModal({ action: "delete", type: "success" });
 
-      // Wait 1 sec then reload senders
       setTimeout(() => {
         reloadSenders();
       }, 1000);
     } catch (error: Error | any) {
-      // If the user fails to go through the OAuth flow, we set loggedIn to false
       if (error.message == "The user did not approve access.") {
         setLoggedIn(false);
       }
@@ -212,7 +219,10 @@ const DeleteConfirm = ({ emailsNum, sendersNum }: ConfirmProps) => {
         Are you sure you want to <b>delete {emailsNum} email(s)</b> from{" "}
         <b>{sendersNum}</b> sender(s)?
       </p>
-      <p className="note">Note: This will not block or unsubscribe.</p>
+      <p className="note">
+        This frees about <b>{formatBytes(size)}</b>. It will not block or
+        unsubscribe. You can undo this right after.
+      </p>
 
       <button className="secondary" onClick={showEmails}>
         Show all emails
@@ -235,6 +245,32 @@ const DeletePending = () => {
 };
 
 const DeleteSuccess = () => {
+  const { undoLastDelete } = useActions();
+  const { reloadSenders } = useSenders();
+  const { setModal } = useModal();
+  const [undoing, setUndoing] = useState(false);
+  const [undone, setUndone] = useState(false);
+
+  const handleUndo = async () => {
+    setUndoing(true);
+    await undoLastDelete();
+    setUndoing(false);
+    setUndone(true);
+    reloadSenders(true);
+  };
+
+  if (undone) {
+    return (
+      <>
+        <p>↩️ Restored</p>
+        <p>Your emails have been moved back to the inbox.</p>
+        <button className="primary" onClick={() => setModal(null)}>
+          Done
+        </button>
+      </>
+    );
+  }
+
   return (
     <>
       <p>✅ Success!</p>
@@ -242,6 +278,209 @@ const DeleteSuccess = () => {
       <p className="note">
         Note: You may need to reload your browser to see changes.
       </p>
+      <button className="secondary" onClick={handleUndo} disabled={undoing}>
+        {undoing ? "Undoing…" : "Undo"}
+      </button>
+      <button className="primary" onClick={() => setModal(null)}>
+        Done
+      </button>
+    </>
+  );
+};
+
+const ArchiveConfirm = ({ emailsNum, sendersNum }: ConfirmProps) => {
+  const { searchEmailSenders, archiveSenders } = useActions();
+  const { selectedSenders, setSelectedSenders } = useSelectedSenders();
+  const { reloadSenders } = useSenders();
+  const { setModal } = useModal();
+  const { setLoggedIn } = useLoggedIn();
+  const size = useSelectedSize();
+
+  const showEmails = () => searchEmailSenders(Object.keys(selectedSenders));
+
+  const archive = async () => {
+    try {
+      setModal({ action: "archive", type: "pending" });
+      await archiveSenders(Object.keys(selectedSenders));
+      setSelectedSenders({});
+      setModal({ action: "archive", type: "success" });
+      setTimeout(() => reloadSenders(), 1000);
+    } catch (error: Error | any) {
+      if (error.message == "The user did not approve access.") {
+        setLoggedIn(false);
+      }
+    }
+  };
+
+  return (
+    <>
+      <p>
+        Archive <b>{emailsNum} email(s)</b> from <b>{sendersNum}</b> sender(s)?
+      </p>
+      <p className="note">
+        This removes about <b>{formatBytes(size)}</b> of mail from your Inbox.
+        Nothing is deleted — you can still find it in "All Mail".
+      </p>
+      <button className="secondary" onClick={showEmails}>
+        Show all emails
+      </button>
+      <button className="primary" onClick={archive}>
+        Confirm
+      </button>
+    </>
+  );
+};
+
+const ArchivePending = () => (
+  <>
+    <p>Archiving emails...</p>
+    <div style={{ height: "5px" }}></div>
+    <div className="loader"></div>
+  </>
+);
+
+const ArchiveSuccess = () => {
+  const { setModal } = useModal();
+  return (
+    <>
+      <p>✅ Success!</p>
+      <p>Selected senders' emails have been archived.</p>
+      <button className="primary" onClick={() => setModal(null)}>
+        Done
+      </button>
+    </>
+  );
+};
+
+const PreviewModal = ({ email, name }: { email: string; name: string }) => {
+  const { getSenderPreview } = useActions();
+  const { setModal } = useModal();
+  const [messages, setMessages] = useState<MessagePreview[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getSenderPreview(email, 10).then((m) => {
+      if (active) setMessages(m);
+    });
+    return () => {
+      active = false;
+    };
+  }, [email, getSenderPreview]);
+
+  return (
+    <>
+      <p>
+        Recent emails from <b>{name || email}</b>
+      </p>
+      {messages === null ? (
+        <div className="loader"></div>
+      ) : messages.length === 0 ? (
+        <p className="note">No recent emails found.</p>
+      ) : (
+        <ul className="preview-list">
+          {messages.map((m, i) => (
+            <li key={i} className="preview-item">
+              <span className="preview-subject">{m.subject}</span>
+              <span className="preview-snippet">{m.snippet}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button className="primary" onClick={() => setModal(null)}>
+        Close
+      </button>
+    </>
+  );
+};
+
+const RulesModal = () => {
+  const { listRules, addRule, deleteRule } = useActions();
+  const { selectedSenders } = useSelectedSenders();
+  const { setModal } = useModal();
+  const [rules, setRules] = useState<CleanRule[] | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = () => listRules().then(setRules);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const selected = Object.keys(selectedSenders);
+
+  const createRules = async (action: "trash" | "archive") => {
+    setBusy(true);
+    for (const sender of selected) {
+      await addRule(sender, action);
+    }
+    await load();
+    setBusy(false);
+  };
+
+  const remove = async (id: string) => {
+    setBusy(true);
+    await deleteRule(id);
+    await load();
+    setBusy(false);
+  };
+
+  return (
+    <>
+      <p>Auto-clean rules</p>
+      <p className="note">
+        Rules run automatically in Gmail: incoming mail from these senders is
+        trashed or archived for you.
+      </p>
+
+      {selected.length > 0 && (
+        <div className="rules-add">
+          <p>
+            Create a rule for <b>{selected.length}</b> selected sender(s):
+          </p>
+          <button
+            className="secondary"
+            disabled={busy}
+            onClick={() => createRules("archive")}
+          >
+            Auto-archive
+          </button>
+          <button
+            className="primary"
+            disabled={busy}
+            onClick={() => createRules("trash")}
+          >
+            Auto-trash
+          </button>
+        </div>
+      )}
+
+      {rules === null ? (
+        <div className="loader"></div>
+      ) : rules.length === 0 ? (
+        <p className="note">No rules yet.</p>
+      ) : (
+        <ul className="rules-list">
+          {rules.map((rule) => (
+            <li key={rule.id} className="rule-item">
+              <span className="rule-text">
+                <b>{rule.action}</b> {rule.sender}
+              </span>
+              <button
+                className="rule-delete"
+                disabled={busy}
+                onClick={() => remove(rule.id)}
+                aria-label={`Delete rule for ${rule.sender}`}
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <button className="primary" onClick={() => setModal(null)}>
+        Close
+      </button>
     </>
   );
 };
@@ -314,6 +553,21 @@ export const ModalPopup = () => {
         return <DeletePending />;
       case action === "delete" && type === "success":
         return <DeleteSuccess />;
+      case action === "archive" && type === "confirm":
+        return (
+          <ArchiveConfirm
+            emailsNum={extras!.emailsNum}
+            sendersNum={extras!.sendersNum}
+          />
+        );
+      case action === "archive" && type === "pending":
+        return <ArchivePending />;
+      case action === "archive" && type === "success":
+        return <ArchiveSuccess />;
+      case type === "preview":
+        return <PreviewModal email={extras!.email} name={extras!.name} />;
+      case type === "rules":
+        return <RulesModal />;
       case type === "no-sender":
         return <NoSender />;
       default:

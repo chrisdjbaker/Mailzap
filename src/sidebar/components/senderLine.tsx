@@ -1,20 +1,26 @@
 import "./senderLine.css";
 import { useSelectedSenders } from "../providers/selectedSendersContext";
 import { useActions } from "../../_shared/providers/actionsContext";
+import { useModal } from "../providers/modalContext";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faEye } from "@fortawesome/free-solid-svg-icons";
 
 interface SenderLineProps {
   senderName: string;
   senderEmail: string;
   senderCount: number;
+  senderSize: string;
 }
 
 export const SenderLine = ({
   senderName,
   senderEmail,
   senderCount,
+  senderSize,
 }: SenderLineProps) => {
   const { selectedSenders, setSelectedSenders } = useSelectedSenders();
   const { searchEmailSenders } = useActions();
+  const { setModal } = useModal();
 
   const selectLine = () => {
     setSelectedSenders((prev) => {
@@ -25,6 +31,13 @@ export const SenderLine = ({
         delete newSelected[senderEmail];
       }
       return newSelected;
+    });
+  };
+
+  const openPreview = () => {
+    setModal({
+      type: "preview",
+      extras: { email: senderEmail, name: senderName },
     });
   };
 
@@ -54,8 +67,19 @@ export const SenderLine = ({
           </span>
         </div>
       </div>
-      <div className="email-count">
-        <span>{senderCount}</span>
+      <div className="sender-meta">
+        <button
+          className="preview-button"
+          aria-label={`Preview emails from ${senderEmail}`}
+          title="Preview recent emails"
+          onClick={openPreview}
+        >
+          <FontAwesomeIcon icon={faEye} />
+        </button>
+        <div className="email-count">
+          <span>{senderCount}</span>
+          <span className="sender-size">{senderSize}</span>
+        </div>
       </div>
     </div>
   );

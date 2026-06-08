@@ -1,22 +1,43 @@
 import "./actionButton.css";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faBan, faTrash } from "@fortawesome/free-solid-svg-icons";
+import {
+  faBan,
+  faTrash,
+  faBoxArchive,
+} from "@fortawesome/free-solid-svg-icons";
 import { IconProp } from "@fortawesome/fontawesome-svg-core";
 import { useSelectedSenders } from "../providers/selectedSendersContext";
 import { useModal } from "../providers/modalContext";
 
-export const ActionButton = ({ id }: { id: string }) => {
-  const text: string = id == "unsubscribe-button" ? "Unsubscribe" : "Delete";
-  const icon: IconProp = id == "unsubscribe-button" ? faBan : faTrash;
+type ButtonId = "unsubscribe-button" | "delete-button" | "archive-button";
+
+const CONFIG: Record<
+  ButtonId,
+  { text: string; icon: IconProp; action: "unsubscribe" | "delete" | "archive" }
+> = {
+  "unsubscribe-button": {
+    text: "Unsubscribe",
+    icon: faBan,
+    action: "unsubscribe",
+  },
+  "delete-button": { text: "Delete", icon: faTrash, action: "delete" },
+  "archive-button": {
+    text: "Archive",
+    icon: faBoxArchive,
+    action: "archive",
+  },
+};
+
+export const ActionButton = ({ id }: { id: ButtonId }) => {
+  const { text, icon, action } = CONFIG[id];
   const { selectedSenders } = useSelectedSenders();
   const { setModal } = useModal();
 
   const handleClick = () => {
     const selectedSenderKeys: string[] = Object.keys(selectedSenders);
     if (selectedSenderKeys.length > 0) {
-      // open confirmation modal
       setModal({
-        action: id === "unsubscribe-button" ? "unsubscribe" : "delete",
+        action,
         type: "confirm",
         extras: {
           emailsNum: selectedSenderKeys.reduce(
@@ -27,7 +48,6 @@ export const ActionButton = ({ id }: { id: string }) => {
         },
       });
     } else {
-      // open no-senders modal
       setModal({ type: "no-sender" });
     }
   };

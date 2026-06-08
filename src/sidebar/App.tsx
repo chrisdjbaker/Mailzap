@@ -2,6 +2,7 @@ import "./App.css";
 import { useEffect } from "react";
 import { ActionButton } from "./components/actionButton.tsx";
 import { ReloadButton } from "./components/reloadButton.tsx";
+import { RulesButton } from "./components/rulesButton.tsx";
 import { ModalPopup } from "./components/modalPopup.tsx";
 import { SendersContainer } from "./components/sendersContainer.tsx";
 import { DeclutterHeader } from "./components/header.tsx";
@@ -39,9 +40,13 @@ function App() {
                 <div className="sender-actions">
                   <ActionButton id="unsubscribe-button" />
                   <ActionButton id="delete-button" />
+                  <ActionButton id="archive-button" />
                 </div>
 
-                <ReloadButton />
+                <div className="bar-actions">
+                  <RulesButton />
+                  <ReloadButton />
+                </div>
               </div>
 
               <SendersContainer />

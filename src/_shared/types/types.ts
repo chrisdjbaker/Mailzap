@@ -2,6 +2,29 @@ export interface Sender {
   name: string;
   email: string;
   count: number;
+  /** Approximate total size of this sender's messages, in bytes. */
+  size: number;
+}
+
+/**
+ * A saved auto-clean rule, backed by a Gmail server-side filter so Gmail
+ * applies it automatically to incoming mail.
+ *
+ * @property id - The Gmail filter id (used to delete the rule).
+ * @property sender - The sender email address the rule matches.
+ * @property action - What Gmail does to matching mail: trash it or archive it.
+ */
+export interface CleanRule {
+  id: string;
+  sender: string;
+  action: "trash" | "archive";
+}
+
+/** A single message preview shown in the per-sender drill-down. */
+export interface MessagePreview {
+  subject: string;
+  date: string;
+  snippet: string;
 }
 
 /**

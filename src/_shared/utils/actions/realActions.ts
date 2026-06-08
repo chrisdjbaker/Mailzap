@@ -1,11 +1,18 @@
-import { Sender } from "../../types/types";
+import { CleanRule, MessagePreview, Sender } from "../../types/types";
 import { fetchAllSenders } from "../fetchSenders";
-import { trashMultipleSenders } from "../trashSenders";
+import { syncSenders } from "../syncSenders";
+import {
+  trashMultipleSenders,
+  archiveMultipleSenders,
+  undoLastTrash,
+} from "../modifySenders";
 import { unsubscribeSendersAuto } from "../unsubscribeSenders";
 import { Actions } from "./actionsInterface";
 import { getValidToken, signInWithGoogle } from "../chromeAuth";
 import { getEmailAccount } from "../utils";
-import { gmailFetch } from "../gmailApi";
+import { addRule, deleteRule, listRules } from "../rules";
+import { getSenderPreview } from "../senderPreview";
+import { readAccount, writeAccount, tuplesToSenders } from "../senderStore";
 
 export const realActions: Actions = {
   async isLoggedIn(
@@ -25,8 +32,6 @@ export const realActions: Actions = {
   getEmailAccount,
 
   searchEmailSenders(senderEmailAddresses: string[]): void {
-    // Searches for emails in the Gmail tab
-
     console.log("Searching for emails: ", senderEmailAddresses);
 
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -46,27 +51,26 @@ export const realActions: Actions = {
     getEmailAccount: () => Promise<string> = realActions.getEmailAccount,
   ): Promise<void> {
     const accountEmail = await getEmailAccount();
-    return new Promise((resolve) => {
-      trashMultipleSenders(senderEmailAddresses, accountEmail).then(() => {
-        // Remove senders from local storage
-        chrome.storage.local.get([accountEmail], (result) => {
-          if (result[accountEmail].senders) {
-            const updatedSenders = result[accountEmail].senders.filter(
-              (sender: [string, string, number]) =>
-                !senderEmailAddresses.includes(sender[0]),
-            );
-            chrome.storage.local.set(
-              { [accountEmail]: { senders: updatedSenders } },
-              () => {
-                console.log("Updated senders in local storage.");
-              },
-            );
-          }
-        });
+    await trashMultipleSenders(senderEmailAddresses, accountEmail);
+    await removeSendersFromStore(accountEmail, senderEmailAddresses);
+    console.log("Trashed senders successfully");
+  },
 
-        resolve(console.log("Trashed senders successfully"));
-      });
-    });
+  async archiveSenders(
+    senderEmailAddresses: string[],
+    getEmailAccount: () => Promise<string> = realActions.getEmailAccount,
+  ): Promise<void> {
+    const accountEmail = await getEmailAccount();
+    await archiveMultipleSenders(senderEmailAddresses, accountEmail);
+    await removeSendersFromStore(accountEmail, senderEmailAddresses);
+    console.log("Archived senders successfully");
+  },
+
+  async undoLastDelete(
+    getEmailAccount: () => Promise<string> = realActions.getEmailAccount,
+  ): Promise<number> {
+    const accountEmail = await getEmailAccount();
+    return undoLastTrash(accountEmail);
   },
 
   async getAllSenders(
@@ -76,47 +80,17 @@ export const realActions: Actions = {
     const accountEmail = await getEmailAccount();
 
     if (fetchNew) {
-      await fetchAllSenders(accountEmail);
+      // Prefer a cheap incremental sync; falls back to a full scan internally.
+      await syncSenders(accountEmail);
     }
 
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.get(accountEmail).then(async (result) => {
-        // If "senders" key does not exist on given email, fetch all senders and retry
-        if (!result[accountEmail] || !result[accountEmail].senders) {
-          await fetchAllSenders(accountEmail);
-          const refreshed = await chrome.storage.local.get([accountEmail]);
-          result = refreshed;
-        }
+    let stored = await readAccount(accountEmail);
+    if (stored.senders.length === 0) {
+      await fetchAllSenders(accountEmail);
+      stored = await readAccount(accountEmail);
+    }
 
-        if (chrome.runtime.lastError) {
-          reject(chrome.runtime.lastError);
-          return;
-        }
-
-        const senders = result[accountEmail].senders;
-        if (senders) {
-          const realSenders: Sender[] = senders
-            .filter(
-              (sender: [string, string, number]) =>
-                sender[0] !== "null" && !sender[0].endsWith("@gmail.com"),
-            )
-            .map((sender: [string, string, number]) => ({
-              email: sender[0],
-              name: sender[1],
-              count: sender[2],
-            }));
-          resolve(realSenders);
-        } else {
-          if (!fetchNew) {
-            // Retry with fetching new senders if not found
-            await realActions.getAllSenders(true, getEmailAccount);
-          } else {
-            // Already fetched - no senders found
-            resolve([]);
-          }
-        }
-      });
-    });
+    return tuplesToSenders(stored.senders);
   },
 
   async checkFetchProgress(
@@ -147,24 +121,55 @@ export const realActions: Actions = {
     getEmailAccount: () => Promise<string> = realActions.getEmailAccount,
   ): Promise<void> {
     const accountEmail = await getEmailAccount();
-    const token = await getValidToken(accountEmail);
+    await addRule(accountEmail, senderEmailAddress, "trash");
+  },
 
-    const filter: gapi.client.gmail.Filter = {
-      criteria: { from: senderEmailAddress },
-      action: { addLabelIds: ["TRASH"] },
-    };
+  async getSenderPreview(
+    senderEmail: string,
+    limit = 10,
+    getEmailAccount: () => Promise<string> = realActions.getEmailAccount,
+  ): Promise<MessagePreview[]> {
+    const accountEmail = await getEmailAccount();
+    return getSenderPreview(accountEmail, senderEmail, limit);
+  },
 
-    try {
-      await gmailFetch("/settings/filters", token, {
-        method: "POST",
-        body: JSON.stringify(filter),
-      });
-    } catch (err) {
-      console.error(
-        `Failed to create block filter for ${senderEmailAddress}:`,
-        err,
-      );
-      throw err;
-    }
+  async listRules(
+    getEmailAccount: () => Promise<string> = realActions.getEmailAccount,
+  ): Promise<CleanRule[]> {
+    const accountEmail = await getEmailAccount();
+    return listRules(accountEmail);
+  },
+
+  async addRule(
+    sender: string,
+    action: "trash" | "archive",
+    getEmailAccount: () => Promise<string> = realActions.getEmailAccount,
+  ): Promise<CleanRule> {
+    const accountEmail = await getEmailAccount();
+    return addRule(accountEmail, sender, action);
+  },
+
+  async deleteRule(
+    ruleId: string,
+    getEmailAccount: () => Promise<string> = realActions.getEmailAccount,
+  ): Promise<void> {
+    const accountEmail = await getEmailAccount();
+    return deleteRule(accountEmail, ruleId);
   },
 };
+
+/**
+ * Removes the given senders from stored sender data while preserving the
+ * account's history cursor (so a subsequent incremental sync still works).
+ */
+async function removeSendersFromStore(
+  accountEmail: string,
+  senderEmailAddresses: string[],
+): Promise<void> {
+  const stored = await readAccount(accountEmail);
+  const remove = new Set(senderEmailAddresses);
+  await writeAccount(accountEmail, {
+    ...stored,
+    senders: stored.senders.filter(([email]) => !remove.has(email)),
+  });
+}

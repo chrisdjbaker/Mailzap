@@ -1,5 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-function-type */
-import { ManualUnsubscribeData, Sender } from "../../types/types";
+import {
+  CleanRule,
+  ManualUnsubscribeData,
+  MessagePreview,
+  Sender,
+} from "../../types/types";
 
 export interface Actions {
   /**
@@ -113,4 +118,54 @@ export interface Actions {
    * @returns A promise that resolves when the sender has been blocked.
    */
   blockSender(senderEmailAddress: string): Promise<void>;
+
+  /**
+   * Archives all emails from the specified senders (removes them from the
+   * Inbox without trashing) and removes them from local storage.
+   *
+   * @param senderEmailAddresses - The senders whose emails should be archived.
+   * @returns A promise that resolves when archiving is complete.
+   */
+  archiveSenders(senderEmailAddresses: string[]): Promise<void>;
+
+  /**
+   * Restores the most recently trashed batch of emails from Trash.
+   *
+   * @returns A promise resolving to the number of emails restored.
+   */
+  undoLastDelete(): Promise<number>;
+
+  /**
+   * Fetches a short preview (subject, date, snippet) of a sender's most recent
+   * messages.
+   *
+   * @param senderEmail - The sender to preview.
+   * @param limit - Maximum number of messages to return.
+   * @returns A promise resolving to the recent messages.
+   */
+  getSenderPreview(
+    senderEmail: string,
+    limit?: number,
+  ): Promise<MessagePreview[]>;
+
+  /**
+   * Lists the saved auto-clean rules (backed by Gmail filters) for the account.
+   */
+  listRules(): Promise<CleanRule[]>;
+
+  /**
+   * Creates a saved auto-clean rule that trashes or archives future mail from a
+   * sender automatically.
+   *
+   * @param sender - The sender email address to match.
+   * @param action - Whether to trash or archive matching mail.
+   */
+  addRule(sender: string, action: "trash" | "archive"): Promise<CleanRule>;
+
+  /**
+   * Deletes a saved auto-clean rule by its id.
+   *
+   * @param ruleId - The id of the rule to delete.
+   */
+  deleteRule(ruleId: string): Promise<void>;
 }

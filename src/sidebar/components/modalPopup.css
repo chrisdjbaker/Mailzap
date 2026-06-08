@@ -82,3 +82,73 @@ button.secondary:hover {
     transform: rotate(360deg);
   }
 }
+
+/* Per-sender preview drill-down */
+.preview-list,
+.rules-list {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0;
+  max-height: 240px;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.preview-item {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 6px;
+  border-bottom: 1px solid #f1f3f4;
+}
+
+.preview-subject {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #202124;
+}
+
+.preview-snippet {
+  font-size: 0.72rem;
+  color: #5f6368;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Auto-clean rules */
+.rules-add {
+  margin: 10px 0;
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+}
+
+.rule-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 6px;
+  border-bottom: 1px solid #f1f3f4;
+  font-size: 0.8rem;
+}
+
+.rule-text b {
+  text-transform: capitalize;
+  color: #4285f4;
+}
+
+.rule-delete {
+  border: none;
+  background: none;
+  color: #9aa0a6;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.rule-delete:hover {
+  color: #d93025;
+  background-color: #fce8e6;
+}

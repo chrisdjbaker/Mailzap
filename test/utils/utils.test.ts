@@ -1,7 +1,21 @@
 import {
   parseSender,
   parseListUnsubscribeHeader,
+  formatBytes,
 } from "../../src/_shared/utils/utils";
+
+describe("formatBytes", () => {
+  test.each([
+    [0, "0 B"],
+    [512, "512 B"],
+    [1024, "1.0 KB"],
+    [1024 * 1024, "1.0 MB"],
+    [5 * 1024 * 1024, "5.0 MB"],
+    [1024 * 1024 * 1024, "1.0 GB"],
+  ])("formats %i bytes as %s", (bytes, expected) => {
+    expect(formatBytes(bytes)).toBe(expected);
+  });
+});
 
 describe("parseSender", () => {
   test("extracts name and email", () => {

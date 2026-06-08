@@ -1,44 +1,46 @@
 import { getValidToken } from "./chromeAuth";
 import { parseSender } from "./utils";
 import { fetchMessageIds } from "./fetchMessageIds";
-import { gmailBatchGet, GMAIL_BATCH_LIMIT } from "./gmailApi";
-
-interface SenderData {
-  name: Set<string>;
-  count: number;
-  latestMessageId: string;
-}
+import { gmailBatchGet, GMAIL_BATCH_LIMIT, gmailFetch } from "./gmailApi";
+import {
+  SenderAgg,
+  aggToTuples,
+  writeAccount,
+  writeIndex,
+  MessageIndex,
+} from "./senderStore";
 
 interface MessageData {
   senderEmail: string;
   senderName: string;
   messageId: string;
+  size: number;
 }
 
 interface GmailMessage {
   id?: string;
+  sizeEstimate?: number;
   payload?: { headers?: { name: string; value: string }[] };
 }
 
 /**
- * Fetches all unique email senders for a given Gmail account and counts their number of messages
- * The resulting sender data is stored for the specified account, in Chrome's local storage.
+ * Performs a full scan of a Gmail account: enumerates every message, groups
+ * them by sender with per-sender counts and total size, records a message
+ * id → sender index (for incremental sync), and stores the current Gmail
+ * `historyId` so future refreshes can sync incrementally.
  *
- * @param accountEmail - The email address of the account for which senders are being fetched.
- * @returns A Promise that resolves when all senders have been fetched and stored.
- *
- * @remarks
- * - Progress is tracked under `fetchProgress[accountEmail]` in Chrome's local
- *   storage as a fraction between 0 and 1, merged so that progress for other
- *   accounts is preserved.
- * - Sender metadata is fetched using Gmail's batch endpoint
- *   ({@link gmailBatchGet}) to minimise round-trips.
+ * @param accountEmail - The account to scan.
  */
 export async function fetchAllSenders(accountEmail: string): Promise<void> {
   const authToken = await getValidToken(accountEmail);
-  const senders: { [key: string]: SenderData } = {};
+  const senders: Record<string, SenderAgg> = {};
+  const index: MessageIndex = {};
 
   try {
+    // Capture the history cursor up front so we never miss mail that arrives
+    // during the scan (we'd rather re-process a message than skip it).
+    const startHistoryId = await getCurrentHistoryId(authToken);
+
     const allMessageIds = await fetchMessageIds(authToken);
     const total = allMessageIds.length;
 
@@ -47,9 +49,9 @@ export async function fetchAllSenders(accountEmail: string): Promise<void> {
     for (let i = 0; i < total; i += GMAIL_BATCH_LIMIT) {
       const batchIds = allMessageIds.slice(i, i + GMAIL_BATCH_LIMIT);
       const batchSenders = await fetchMessageSendersBatch(authToken, batchIds);
-      updateSenders(batchSenders, senders);
-
-      // Progress reflects how many messages have actually been processed.
+      for (const msg of batchSenders) {
+        addMessage(senders, index, msg);
+      }
       await setProgress(
         accountEmail,
         Math.min((i + batchIds.length) / total, 1),
@@ -60,14 +62,49 @@ export async function fetchAllSenders(accountEmail: string): Promise<void> {
       `Fetched ${total} emails. Found ${Object.keys(senders).length} unique senders.`,
     );
 
-    storeSenders(senders, accountEmail);
+    await writeAccount(accountEmail, {
+      senders: aggToTuples(senders),
+      historyId: startHistoryId,
+    });
+    await writeIndex(accountEmail, index);
   } catch (err) {
     console.error("Error fetching senders:", err);
     throw err;
   } finally {
-    // Always clear progress so the UI doesn't get stuck on a stale value.
     await setProgress(accountEmail, 0);
   }
+}
+
+/**
+ * Folds a single message into the sender aggregation map and the message index.
+ */
+export function addMessage(
+  senders: Record<string, SenderAgg>,
+  index: MessageIndex,
+  msg: MessageData,
+): void {
+  index[msg.messageId] = [msg.senderEmail, msg.size];
+  const existing = senders[msg.senderEmail];
+  if (existing) {
+    existing.count += 1;
+    existing.size += msg.size;
+    existing.names.add(msg.senderName);
+  } else {
+    senders[msg.senderEmail] = {
+      count: 1,
+      size: msg.size,
+      names: new Set([msg.senderName]),
+      latestMessageId: msg.messageId,
+    };
+  }
+}
+
+/** Returns the account's current Gmail history id via the profile endpoint. */
+async function getCurrentHistoryId(
+  token: chrome.identity.GetAuthTokenResult,
+): Promise<string | undefined> {
+  const profile = await gmailFetch<{ historyId?: string }>("/profile", token);
+  return profile.historyId;
 }
 
 /**
@@ -86,12 +123,8 @@ async function setProgress(
 }
 
 /**
- * Fetches sender information for a batch of Gmail message IDs in a single
+ * Fetches sender + size information for a batch of message IDs in a single
  * multipart batch request.
- *
- * @param token - The OAuth token used for authenticating Gmail API requests.
- * @param messageIds - Up to {@link GMAIL_BATCH_LIMIT} Gmail message IDs.
- * @returns A Promise resolving to the sender info for each successfully fetched message.
  */
 async function fetchMessageSendersBatch(
   token: chrome.identity.GetAuthTokenResult,
@@ -113,63 +146,13 @@ async function fetchMessageSendersBatch(
       senderEmail: email,
       senderName: name,
       messageId: msgData.id ?? messageIds[i],
+      size: msgData.sizeEstimate ?? 0,
     });
   });
   return result;
 }
 
-/**
- * Updates the `allSenders` object with sender information from the provided list of messages.
- *
- * For each message in `messageList`, this function increments the sender's message count,
- * adds the sender's name to a set of names associated with the sender's email, and sets
- * the latest message ID if the sender is new.
- *
- * @param messageList - An array of message data objects containing sender information.
- * @param allSenders - An object mapping sender email addresses to their aggregated sender data.
- */
-function updateSenders(
-  messageList: MessageData[],
-  allSenders: { [x: string]: SenderData },
-): void {
-  messageList.forEach((message) => {
-    if (allSenders[message.senderEmail]) {
-      allSenders[message.senderEmail].count += 1;
-      allSenders[message.senderEmail]["name"].add(message.senderName);
-    } else {
-      allSenders[message.senderEmail] = {
-        count: 1,
-        name: new Set([message.senderName]),
-        latestMessageId: message.messageId,
-      };
-    }
-  });
-}
-
-/**
- * Stores a list of senders for a specific account in Chrome's local storage.
- *
- * @param senders - An object mapping sender email addresses to their corresponding SenderData.
- * @param accountEmail - The email address of the account to associate the stored senders with.
- */
-function storeSenders(
-  senders: { [s: string]: SenderData },
-  accountEmail: string,
-): void {
-  const parsedSenders = Object.entries(senders)
-    .map(([email, { name, count, latestMessageId }]) => [
-      email,
-      Array.from(name).sort((a, b) => a.length - b.length)[0], // Shortest name
-      count,
-      latestMessageId,
-    ])
-    .sort((a, b) => Number(b[2]) - Number(a[2])); // Sort by count in descending order
-
-  chrome.storage.local.set({ [accountEmail]: { senders: parsedSenders } });
-}
-
 export const exportForTest = {
   fetchMessageSendersBatch,
-  updateSenders,
-  storeSenders,
+  addMessage,
 };
